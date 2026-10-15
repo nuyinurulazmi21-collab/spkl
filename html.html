@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Agent Hitung Lembur</title>
+<style>
+:root{--bg:#f6f7f9;--card:#fff;--tx:#1b1f24;--mut:#667085;--bd:#dfe3e8;--ac:#1d6fe8;--acx:#fff;--ok:#117a3d;
+box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#14171b;--card:#1d2127;--tx:#eceff3;--mut:#9aa4b2;--bd:#303741;--ac:#5b9bff;--acx:#0b1220;--ok:#4cd486}}
+:root[data-theme="dark"]{--bg:#14171b;--card:#1d2127;--tx:#eceff3;--mut:#9aa4b2;--bd:#303741;--ac:#5b9bff;--acx:#0b1220;--ok:#4cd486}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--tx);font:15px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+main{max-width:980px;margin:0 auto;padding:16px}
+h1{font-size:22px;margin:4px 0 2px}h2{font-size:16px;margin:0 0 10px}
+p.s{color:var(--mut);margin:0 0 14px}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:14px;margin-bottom:14px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+label{display:block;font-size:12px;color:var(--mut);margin-bottom:3px}
+input,select{width:100%;padding:8px;border:1px solid var(--bd);border-radius:8px;background:var(--bg);color:var(--tx);font:inherit}
+button{padding:9px 14px;border:0;border-radius:8px;background:var(--ac);color:var(--acx);font:inherit;font-weight:600;cursor:pointer}
+button.g{background:transparent;color:var(--ac);border:1px solid var(--bd)}
+button:disabled{opacity:.5;cursor:default}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:10px}
+.w{overflow-x:auto}
+table{border-collapse:collapse;width:100%;min-width:720px}
+th,td{padding:5px 6px;border-bottom:1px solid var(--bd);text-align:left;white-space:nowrap}
+th{font-size:12px;color:var(--mut)}
+td input,td select{padding:5px;min-width:70px}
+td.n{text-align:right;font-variant-numeric:tabular-nums}
+.tot{font-size:20px;font-weight:700;color:var(--ok)}
+#msg{color:var(--mut);margin-top:8px}
+</style>
+</head>
+<body>
+<main>
+<h1>Agent Hitung Lembur</h1>
+<p class="s">Upload foto absensi / form lembur, AI membaca datanya, lalu dihitung sesuai tarif yang kamu atur.</p>
+
+<div class="card">
+<h2>1. Pengaturan tarif</h2>
+<div class="grid">
+<div><label>Dasar tarif</label><select id="mode"><option value="gaji">Dari gaji bulanan (÷173)</option><option value="flat">Tarif flat per jam</option></select></div>
+<div id="gajiBox"><label>Gaji bulanan (Rp)</label><input id="gaji" type="number" value="5000000"></div>
+<div id="flatBox" hidden><label>Tarif per jam (Rp)</label><input id="flat" type="number" value="25000"></div>
+<div><label>Jam pulang normal</label><input id="norm" type="time" value="17:00"></div>
+<div><label>Pembulatan</label><select id="rnd"><option value="0">Per menit (tepat)</option><option value="30">Per 30 menit ke bawah</option><option value="60" selected>Per jam penuh ke bawah</option></select></div>
+</div>
+<h2 style="margin-top:14px">Pengali (default Kepmenaker 102/2004)</h2>
+<div class="grid">
+<div><label>Hari kerja: jam ke-1</label><input id="w1" type="number" step="0.1" value="1.5"></div>
+<div><label>Hari kerja: jam ke-2 dst</label><input id="w2" type="number" step="0.1" value="2"></div>
+<div><label>Libur: 7 jam pertama</label><input id="h1" type="number" step="0.1" value="2"></div>
+<div><label>Libur: jam ke-8</label><input id="h2" type="number" step="0.1" value="3"></div>
+<div><label>Libur: jam ke-9 dst</label><input id="h3" type="number" step="0.1" value="4"></div>
+</div>
+</div>
+
+<div class="card">
+<h2>Tarif per orang</h2>
+<p class="s" style="margin-bottom:8px">Daftar nama muncul otomatis setelah data terbaca. Pilih <b>Normatif</b> (isi gaji bulanan, dihitung gaji÷173 dengan pengali Kepmenaker) atau <b>Flat per jam</b> (misal 10000, 25000, 28500, 9000). Flat default tanpa pengali; centang bila ingin dikali pengali. "Ikuti global" memakai pengaturan di atas.</p>
+<div class="w"><table style="min-width:560px"><thead><tr><th>Nama</th><th>Jenis tarif</th><th>Nilai (Rp)</th><th>Pakai pengali</th></tr></thead><tbody id="rates"></tbody></table></div>
+</div>
+
+<div class="card">
+<h2>2. Upload gambar</h2>
+<input id="file" type="file" accept="image/*" multiple>
+<div class="row"><button id="read">Baca &amp; hitung dengan AI</button><button class="g" id="add">+ Tambah baris manual</button></div>
+<div id="msg"></div>
+</div>
+
+<div class="card">
+<h2>3. Data &amp; hasil (bisa diedit)</h2>
+<div class="w"><table>
+<thead><tr><th>Nama</th><th>Tanggal</th><th>Masuk</th><th>Pulang</th><th>Jenis hari</th><th>Lembur (jam, opsional)</th><th>Jam dihitung</th><th>Upah lembur</th><th></th></tr></thead>
+<tbody id="rows"></tbody></table></div>
+<div class="row"><div>Total: <span class="tot" id="total">Rp0</span></div><button class="g" id="csv" style="margin-left:auto">Unduh CSV</button></div>
+<div id="perName" style="margin-top:10px;color:var(--mut)"></div>
+</div>
+</main>
+
+<script>
+const $=id=>document.getElementById(id);
+let data=[];
+let rates={};
+const key=n=>String(n||"").trim().toLowerCase();
+const rp=n=>"Rp"+Math.round(n).toLocaleString("id-ID");
+const mins=t=>{if(!t)return null;const m=/^(\d{1,2})[:.](\d{2})/.exec(t);return m?(+m[1])*60+(+m[2]):null};
+const num=id=>parseFloat($(id).value)||0;
+
+function hourly(){return $("mode").value==="gaji"?num("gaji")/173:num("flat")}
+function rateFor(r){
+  const x=rates[key(r.nama)];
+  if(x&&x.tipe==='flat')return {hr:parseFloat(x.nilai)||0,mult:!!x.mult};
+  if(x&&x.tipe==='norm')return {hr:(parseFloat(x.nilai)||0)/173,mult:true};
+  return {hr:hourly(),mult:$("mode").value==="gaji"};
+}
+function calc(r){
+  const rt=rateFor(r);
+  let h=0;
+  if(r.lembur!==""&&r.lembur!=null&&!isNaN(parseFloat(r.lembur))) h=parseFloat(r.lembur);
+  else{
+    const out=mins(r.pulang),nm=mins($("norm").value);
+    if(out!=null){let d=out-nm;if(d<-720)d+=1440;h=Math.max(0,d)/60}
+    if(r.jenis==="libur"){const inn=mins(r.masuk);if(inn!=null&&out!=null){let d=out-inn;if(d<0)d+=1440;h=d/60}}
+  }
+  const g=+$("rnd").value;
+  if(g===30)h=Math.floor(h*2+1e-9)/2;else if(g===60)h=Math.floor(h+1e-9);
+  const tiers=r.jenis==="libur"?[[7,num("h1")],[1,num("h2")],[1e9,num("h3")]]:[[1,num("w1")],[1e9,num("w2")]];
+  if(!rt.mult)tiers.splice(0,tiers.length,[1e9,1]);
+  let left=h,eq=0;
+  for(const [cap,m] of tiers){const u=Math.min(left,cap);eq+=u*m;left-=u;if(left<=0)break}
+  return {h,pay:eq*rt.hr};
+}
+
+function renderRates(){
+  const tb=$("rates");tb.innerHTML="";const seen={};
+  data.forEach(r=>{const k=key(r.nama);if(seen[k])return;seen[k]=1;
+    const x=rates[k]||(rates[k]={tipe:'default',nilai:'',mult:false});
+    const tr=document.createElement("tr");
+    const t0=document.createElement("td");t0.textContent=r.nama||"(tanpa nama)";tr.appendChild(t0);
+    const t1=document.createElement("td");const s=document.createElement("select");
+    [["default","Ikuti global"],["norm","Normatif (gaji bulanan)"],["flat","Flat per jam"]].forEach(([v,l])=>{const o=document.createElement("option");o.value=v;o.textContent=l;if(x.tipe===v)o.selected=true;s.appendChild(o)});
+    s.onchange=()=>{x.tipe=s.value;render()};t1.appendChild(s);tr.appendChild(t1);
+    const t2=document.createElement("td");const i=document.createElement("input");i.type="number";i.value=x.nilai;i.placeholder=x.tipe==="norm"?"gaji/bulan":x.tipe==="flat"?"tarif/jam":"-";i.disabled=x.tipe==="default";
+    i.onchange=()=>{x.nilai=i.value;render()};t2.appendChild(i);tr.appendChild(t2);
+    const t3=document.createElement("td");const c=document.createElement("input");c.type="checkbox";c.style.width="auto";c.checked=x.tipe==="norm"||(x.tipe==="flat"&&x.mult);c.disabled=x.tipe!=="flat";
+    c.onchange=()=>{x.mult=c.checked;render()};t3.appendChild(c);tr.appendChild(t3);
+    tb.appendChild(tr);
+  });
+}
+function render(){
+  const ae=document.activeElement;
+  renderRates();
+  const tb=$("rows");tb.innerHTML="";let total=0;const by={};
+  data.forEach((r,i)=>{
+    const c=calc(r);total+=c.pay;by[r.nama||"(tanpa nama)"]=(by[r.nama||"(tanpa nama)"]||0)+c.pay;
+    const tr=document.createElement("tr");
+    const f=(k,t)=>{const td=document.createElement("td");const inp=document.createElement("input");inp.type=t||"text";inp.value=r[k]??"";inp.onchange=()=>{r[k]=inp.value;render()};td.appendChild(inp);tr.appendChild(td)};
+    f("nama");f("tanggal");f("masuk");f("pulang");
+    const td=document.createElement("td");const s=document.createElement("select");
+    [["kerja","Hari kerja"],["libur","Libur / Minggu"]].forEach(([v,l])=>{const o=document.createElement("option");o.value=v;o.textContent=l;if(r.jenis===v)o.selected=true;s.appendChild(o)});
+    s.onchange=()=>{r.jenis=s.value;render()};td.appendChild(s);tr.appendChild(td);
+    f("lembur");
+    const a=document.createElement("td");a.className="n";a.textContent=c.h.toFixed(2);tr.appendChild(a);
+    const b=document.createElement("td");b.className="n";b.textContent=rp(c.pay);tr.appendChild(b);
+    const d=document.createElement("td");const x=document.createElement("button");x.className="g";x.textContent="✕";x.onclick=()=>{data.splice(i,1);render()};d.appendChild(x);tr.appendChild(d);
+    tb.appendChild(tr);
+  });
+  $("total").textContent=rp(total);
+  $("perName").textContent=Object.keys(by).length>1?Object.entries(by).map(([k,v])=>k+": "+rp(v)).join("  •  "):"";
+}
+
+$("mode").onchange=()=>{const g=$("mode").value==="gaji";$("gajiBox").hidden=!g;$("flatBox").hidden=g;render()};
+["gaji","flat","norm","rnd","w1","w2","h1","h2","h3"].forEach(id=>$(id).addEventListener("change",render));
+$("add").onclick=()=>{data.push({nama:"",tanggal:"",masuk:"",pulang:"",jenis:"kerja",lembur:""});render()};
+
+$("read").onclick=async()=>{
+  const files=[...$("file").files];
+  if(!files.length){$("msg").textContent="Pilih gambar dulu.";return}
+  $("read").disabled=true;$("msg").textContent="AI sedang membaca gambar...";
+  try{
+    const sample=await claude.use("sample");
+    if(!sample){$("msg").textContent="Fitur AI tidak tersedia di tampilan ini. Buka halaman ini langsung dari claude.ai.";return}
+    const lim=await sample.limits();
+    if(!lim.images){$("msg").textContent="Pembacaan gambar belum aktif untuk akun ini.";return}
+    const prompt=`Baca gambar absensi/form lembur ini. Kembalikan HANYA JSON array, tanpa teks lain. Setiap elemen: {"nama":string,"tanggal":"YYYY-MM-DD atau apa adanya","masuk":"HH:MM","pulang":"HH:MM","lembur":angka jam lembur jika tertulis di gambar else "","jenis":"libur" jika hari Minggu/tanggal merah/libur tertulis, selain itu "kerja"}. Satu elemen per baris per orang per tanggal. Jika tidak terbaca isi "". Jangan mengarang data.`;
+    const res=await sample.json(prompt,{images:files,modelTier:"complex",cache:false});
+    const arr=Array.isArray(res)?res:(res.rows||[]);
+    arr.forEach(r=>data.push({nama:r.nama||"",tanggal:r.tanggal||"",masuk:r.masuk||"",pulang:r.pulang||"",jenis:r.jenis==="libur"?"libur":"kerja",lembur:r.lembur??""}));
+    $("msg").textContent=arr.length+" baris terbaca. Periksa & koreksi bila perlu.";render();
+  }catch(e){$("msg").textContent="Gagal: "+(e&&e.message||e.code||"error")}
+  finally{$("read").disabled=false}
+};
+
+$("csv").onclick=async()=>{
+  const q=v=>'"'+String(v??"").replace(/"/g,'""')+'"';
+  const lines=[["Nama","Tanggal","Masuk","Pulang","Jenis","Jam dihitung","Upah lembur"].map(q).join(",")];
+  data.forEach(r=>{const c=calc(r);lines.push([r.nama,r.tanggal,r.masuk,r.pulang,r.jenis,c.h.toFixed(2),Math.round(c.pay)].map(q).join(","))});
+  try{const d=await claude.use("downloads");if(!d){alert("Unduh tidak tersedia");return}
+    await d.save({filename:"lembur.csv",data:lines.join("\n")})}catch(e){}
+};
+render();
+</script>
+</body>
+</html>
